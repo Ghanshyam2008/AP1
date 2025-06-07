@@ -1,0 +1,300 @@
+[3:37 pm, 6/6/2025] Rudra Patel: let mediaRecorder;
+let recordedChunks = [];
+
+async function startRecording() {
+  if (!bottleImage || !mouthVideo.src || !scriptInput.value.trim()) {
+    alert("Please upload bottle image, mouth video, and enter subtitle text before recording.");
+    return;
+  }
+
+  // Start recording canvas stream
+  const stream = canvas.captureStream(30); // 30 FPS
+  recordedChunks = [];
+  
+  try {
+    mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm; codecs=vp8" });
+  } catch (e) {
+    alert("MediaRecorder not supported in your browser.");
+    return;
+  }
+
+  mediaRecorder.ondataavailable = e => {
+    if (e.data.size > 0) recordedChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = saveRecording;
+
+  mediaRecorder.start();
+
+  // Start animation/playback
+  star…
+[6:40 pm, 6/6/2025] Rudra Patel: <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Talking Bottle</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f0f0f0;
+      text-align: center;
+      padding: 20px;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      background: white;
+      display: block;
+      margin: 20px auto;
+      cursor: grab;
+    }
+    canvas:active {
+      cursor: grabbing;
+    }
+    .controls {
+      margin-top: 10px;
+    }
+    textarea {
+      font-size: 16px;
+    }
+    #subtitleBox {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 8px 20px;
+      border-radius: 10px;
+      font-size: 18px;
+      display: none;
+      pointer-events: none;
+    }
+    #container {
+      position: relative;
+      width: 400px;
+      margin: 0 auto;
+    }
+    label {
+      display: inline-block;
+      margin: 5px 10px;
+    }
+    input[type="range"] {
+      width: 150px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+<h2>🧴 Talking Bottle</h2>
+
+<div class="controls">
+  <label>Bottle Image: <input type="file" id="imageInput" accept="image/*"></label><br><br>
+  <label>Mouth Video (green bg): <input type="file" id="mouthVideoInput" accept="video/*"></label><br><br>
+
+  <label>Bottle Zoom: <input type="range" id="zoomSlider" min="0.5" max="2" step="0.1" value="1"></label><br><br>
+  <label>Mouth Zoom: <input type="range" id="mouthZoomSlider" min="0.1" max="3" step="0.05" value="0.25"></label><br>
+  <label>Mouth Rotation: <input type="range" id="mouthRotateSlider" min="-180" max="180" step="1" value="0"></label><br><br>
+
+  <textarea id="scriptInput" rows="3" cols="50" placeholder="Type subtitle text..."></textarea><br><br>
+  <label>Play for (seconds): <input type="number" id="durationInput" min="1" value="5" style="width:60px;"></label><br><br>
+  <button onclick="startAnimation()">▶️ Play</button><br><br>
+  <strong>Tip:</strong> Use ⬅️ ⬆️ ➡️ ⬇️ to move mouth!
+</div>
+
+<div id="container">
+  <canvas id="canvas" width="400" height="500"></canvas>
+  <div id="subtitleBox"></div>
+</div>
+
+<script>
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+
+  const imageInput = document.getElementById("imageInput");
+  const mouthVideoInput = document.getElementById("mouthVideoInput");
+  const zoomSlider = document.getElementById("zoomSlider");
+  const mouthZoomSlider = document.getElementById("mouthZoomSlider");
+  const mouthRotateSlider = document.getElementById("mouthRotateSlider");
+  const scriptInput = document.getElementById("scriptInput");
+  const durationInput = document.getElementById("durationInput");
+  const subtitleBox = document.getElementById("subtitleBox");
+
+  let bottleImage = null;
+  let bottleScale = 1;
+
+  let mouthVideo = document.createElement("video");
+  mouthVideo.muted = true;
+  mouthVideo.loop = true;
+  mouthVideo.autoplay = false;
+  mouthVideo.playsInline = true;
+
+  const mouthCanvas = document.createElement("canvas");
+  const mouthCtx = mouthCanvas.getContext("2d");
+
+  let mouthX = canvas.width / 2;
+  let mouthY = canvas.height / 2 + 100;
+  let mouthBaseWidth = 0;
+  let mouthBaseHeight = 0;
+  let mouthZoom = 0.25;
+  let mouthRotation = 0;
+
+  let isDragging = false;
+  let dragStartX = 0, dragStartY = 0;
+  let mouthStartX = 0, mouthStartY = 0;
+
+  imageInput.addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      bottleImage = new Image();
+      bottleImage.onload = () => draw();
+      bottleImage.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  mouthVideoInput.addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    mouthVideo.src = url;
+    mouthVideo.load();
+    mouthVideo.pause();
+    mouthVideo.onloadedmetadata = () => {
+      mouthCanvas.width = mouthVideo.videoWidth;
+      mouthCanvas.height = mouthVideo.videoHeight;
+      mouthBaseWidth = mouthCanvas.width;
+      mouthBaseHeight = mouthCanvas.height;
+      mouthZoom = 0.25;
+      mouthZoomSlider.value = mouthZoom;
+      draw();
+    };
+  });
+
+  zoomSlider.addEventListener("input", () => {
+    bottleScale = parseFloat(zoomSlider.value);
+    draw();
+  });
+
+  mouthZoomSlider.addEventListener("input", () => {
+    mouthZoom = parseFloat(mouthZoomSlider.value);
+    draw();
+  });
+
+  mouthRotateSlider.addEventListener("input", () => {
+    mouthRotation = parseFloat(mouthRotateSlider.value);
+    draw();
+  });
+
+  canvas.addEventListener("mousedown", e => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    let dx = mouseX - mouthX;
+    let dy = mouseY - mouthY;
+    let radius = (mouthBaseWidth * mouthZoom) / 2;
+    if (Math.sqrt(dx*dx + dy*dy) <= radius) {
+      isDragging = true;
+      dragStartX = mouseX;
+      dragStartY = mouseY;
+      mouthStartX = mouthX;
+      mouthStartY = mouthY;
+      canvas.style.cursor = "grabbing";
+    }
+  });
+
+  window.addEventListener("mouseup", () => {
+    isDragging = false;
+    canvas.style.cursor = "grab";
+  });
+
+  window.addEventListener("mousemove", e => {
+    if (!isDragging) return;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const dx = mouseX - dragStartX;
+    const dy = mouseY - dragStartY;
+    mouthX = mouthStartX + dx;
+    mouthY = mouthStartY + dy;
+    draw();
+  });
+
+  window.addEventListener("keydown", e => {
+    const step = 5;
+    switch (e.key) {
+      case "ArrowUp":    mouthY -= step; break;
+      case "ArrowDown":  mouthY += step; break;
+      case "ArrowLeft":  mouthX -= step; break;
+      case "ArrowRight": mouthX += step; break;
+    }
+    draw();
+  });
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (bottleImage) {
+      const w = canvas.width * bottleScale;
+      const h = canvas.height * bottleScale;
+      const x = (canvas.width - w) / 2;
+      const y = (canvas.height - h) / 2;
+      ctx.drawImage(bottleImage, x, y, w, h);
+    }
+
+    if (mouthVideo && mouthVideo.readyState >= 2 && !mouthVideo.paused) {
+      mouthCtx.clearRect(0, 0, mouthCanvas.width, mouthCanvas.height);
+      mouthCtx.drawImage(mouthVideo, 0, 0);
+      let frame = mouthCtx.getImageData(0, 0, mouthCanvas.width, mouthCanvas.height);
+      let l = frame.data.length / 4;
+      for (let i = 0; i < l; i++) {
+        let r = frame.data[i*4], g = frame.data[i*4+1], b = frame.data[i*4+2];
+        if (g > 100 && g > r + 50 && g > b + 50) frame.data[i*4+3] = 0;
+      }
+      mouthCtx.putImageData(frame, 0, 0);
+
+      ctx.save();
+      ctx.translate(mouthX, mouthY);
+      ctx.rotate(mouthRotation * Math.PI / 180);
+      ctx.drawImage(
+        mouthCanvas,
+        -mouthBaseWidth * mouthZoom / 2,
+        -mouthBaseHeight * mouthZoom / 2,
+        mouthBaseWidth * mouthZoom,
+        mouthBaseHeight * mouthZoom
+      );
+      ctx.restore();
+    }
+  }
+
+  function animate() {
+    draw();
+    if (!mouthVideo.paused) requestAnimationFrame(animate);
+  }
+
+  function startAnimation() {
+    const text = scriptInput.value.trim();
+    const seconds = parseFloat(durationInput.value);
+    if (!bottleImage || !mouthVideo.src || !text || isNaN(seconds)) {
+      alert("Please upload bottle image, mouth video, and enter text + duration.");
+      return;
+    }
+
+    subtitleBox.innerText = text;
+    subtitleBox.style.display = "block";
+
+    mouthVideo.currentTime = 0;
+    mouthVideo.play();
+    animate();
+
+    setTimeout(() => {
+      mouthVideo.pause();
+      subtitleBox.style.display = "none";
+      draw();
+    }, seconds * 1000);
+  }
+</script>
+
+</body>
+</html>
